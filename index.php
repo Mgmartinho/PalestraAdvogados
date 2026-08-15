@@ -48,7 +48,10 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
     if (!$errors) {
         try {
-            $storageDir = __DIR__ . DIRECTORY_SEPARATOR . "storage";
+            $isVercel = getenv("VERCEL") === "1";
+            $storageDir = $isVercel
+                ? sys_get_temp_dir() . DIRECTORY_SEPARATOR . "palestra-advogados"
+                : __DIR__ . DIRECTORY_SEPARATOR . "storage";
             if (!is_dir($storageDir) && !mkdir($storageDir, 0755, true) && !is_dir($storageDir)) {
                 throw new RuntimeException("Nao foi possivel criar a pasta de armazenamento.");
             }
@@ -78,8 +81,36 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
             fclose($csvHandle);
 
-            // A gravacao em SQLite e opcional para nao bloquear o cadastro quando a extensao nao estiver ativa.
-            if (extension_loaded("pdo_sqlite")) {
+            $webhookUrl = trim((string) getenv("LEADS_WEBHOOK_URL"));
+            if ($webhookUrl !== "") {
+                $payload = json_encode([
+                    "nome" => $formData["nome"],
+                    "empresa" => $formData["empresa"],
+                    "whatsapp" => $formData["whatsapp"],
+                    "email" => $formData["email"],
+                    "origem" => "mentoria-advocacia",
+                    "capturado_em" => $timestamp,
+                ], JSON_THROW_ON_ERROR);
+
+                $context = stream_context_create([
+                    "http" => [
+                        "method" => "POST",
+                        "header" => "Content-Type: application/json\r\n",
+                        "content" => $payload,
+                        "timeout" => 8,
+                        "ignore_errors" => true,
+                    ],
+                ]);
+                $webhookResponse = @file_get_contents($webhookUrl, false, $context);
+                $statusLine = $http_response_header[0] ?? "";
+                if ($webhookResponse === false || !preg_match("/\\s2\\d{2}\\s/", $statusLine)) {
+                    throw new RuntimeException("Nao foi possivel enviar o cadastro para a integracao.");
+                }
+            } elseif ($isVercel) {
+                $noticeMessage = "Configure LEADS_WEBHOOK_URL na Vercel para persistir os cadastros.";
+            }
+
+            if (!$isVercel && extension_loaded("pdo_sqlite")) {
                 $sqlitePath = $storageDir . DIRECTORY_SEPARATOR . "leads.sqlite";
                 $pdo = new PDO("sqlite:" . $sqlitePath);
                 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
@@ -109,7 +140,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                     ":origem" => "mentoria-advocacia",
                     ":capturado_em" => $timestamp,
                 ]);
-            } else {
+            } elseif (!$isVercel && !extension_loaded("pdo_sqlite")) {
                 $noticeMessage = "Cadastro salvo no CSV. SQLite nao esta ativo neste ambiente.";
             }
 
@@ -313,13 +344,13 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     <div class="event-page">
         <header class="event-hero" id="topo"><div class="event-shell"><nav class="event-nav"><span class="event-brand">Base Criminal</span><a href="#ingresso">Garantir ingresso</a></nav><div class="event-hero-copy"><span class="event-kicker">Formação prática criminal</span><h1>Imersão da <span>Base Criminal</span></h1><p>Do flagrante à liberdade: estratégia e atuação nas primeiras horas da defesa criminal.</p><a class="event-button" href="#ingresso">Quero garantir minha vaga</a><div class="event-facts"><div><strong>26 de setembro</strong><small>das 09h às 18h</small></div><div><strong>45 vagas</strong><small>encontro exclusivo</small></div><div><strong>Vila Andrade</strong><small>São Paulo / SP</small></div></div></div></div></header>
         <main>
-            <section class="event-section"><div class="event-shell event-art-grid"><div><span class="event-kicker">O tema você já descobriu</span><h2 class="event-heading">A defesa começa <span>antes do processo.</span></h2><p class="event-copy">Uma experiência prática de análise, estratégia e atuação criminal, partindo do flagrante até os primeiros pedidos de liberdade.</p><a class="event-button" href="#ingresso">Inscrições abertas</a></div><img class="event-art" src="imgs/a Defesa.jpeg" alt="A defesa começa antes do processo"></div></section>
-            <section class="event-section alt"><div class="event-shell"><span class="event-kicker">O que você vai levar da imersão</span><h2 class="event-heading">Casos reais. <span>Estratégia real.</span></h2><img class="event-art" src="imgs/o que vai levar.jpeg" alt="Conteúdos e aprendizados da imersão"></div></section>
+            <section class="event-section"><div class="event-shell event-art-grid"><div><span class="event-kicker">O tema você já descobriu</span><h2 class="event-heading">A defesa começa <span>antes do processo.</span></h2><p class="event-copy">Uma experiência prática de análise, estratégia e atuação criminal, partindo do flagrante até os primeiros pedidos de liberdade.</p><a class="event-button" href="#ingresso">Inscrições abertas</a></div><img class="event-art" src="imgs/a-defesa.jpeg" alt="A defesa começa antes do processo"></div></section>
+            <section class="event-section alt"><div class="event-shell"><span class="event-kicker">O que você vai levar da imersão</span><h2 class="event-heading">Casos reais. <span>Estratégia real.</span></h2><img class="event-art" src="imgs/o-que-vai-levar.jpeg" alt="Conteúdos e aprendizados da imersão"></div></section>
             <section class="event-cronograma"><div class="event-shell"><span class="event-kicker">Um dia inteiro de prática criminal</span><h2 class="event-heading">Cronograma da <span>imersão</span></h2><img class="event-art" src="imgs/cronograma.jpeg" alt="Cronograma da Imersão da Base Criminal"></div></section>
-            <section class="event-section"><div class="event-shell"><span class="event-kicker">Quem estará com a gente</span><h2 class="event-heading">Dois profissionais. <span>Duas experiências.</span></h2><div class="event-art-grid"><img class="event-art" src="imgs/quem estara com a gente 1.jpeg" alt="Dr. Bruno Santana e Dr. Matheus Alexandre, palestrantes da imersão"><img class="event-art" src="imgs/quem estara com a gente 2.jpeg" alt="Experiência profissional dos palestrantes"></div></div></section>
+            <section class="event-section"><div class="event-shell"><span class="event-kicker">Quem estará com a gente</span><h2 class="event-heading">Dois profissionais. <span>Duas experiências.</span></h2><div class="event-art-grid"><img class="event-art" src="imgs/quem-estara-com-a-gente-1.jpeg" alt="Dr. Bruno Santana e Dr. Matheus Alexandre, palestrantes da imersão"><img class="event-art" src="imgs/quem-estara-com-a-gente-2.jpeg" alt="Experiência profissional dos palestrantes"></div></div></section>
             <section class="event-section alt"><div class="event-shell"><span class="event-kicker">Dúvidas frequentes</span><h2 class="event-heading">Tudo o que você precisa <span>saber.</span></h2><div class="event-faq"><details><summary>Qual será o tema da imersão?</summary><p>Do Flagrante à Liberdade: estratégia e atuação nas primeiras horas da defesa criminal.</p></details><details><summary>Quando e onde será?</summary><p>26 de setembro, das 09h às 18h, na Av. Giovanni Gronchi, 6195, Vila Andrade, São Paulo/SP.</p></details><details><summary>Quem pode participar?</summary><p>Estudantes e profissionais que tenham interesse em Direito Penal e prática criminal.</p></details><details><summary>Vai ter brinde?</summary><p>Sim. Todos os participantes receberão um brinde. Os 20 primeiros inscritos terão um brinde diferenciado e condição especial.</p></details></div></div></section>
             <section class="event-price" id="ingresso"><div class="event-shell"><span class="event-kicker">Apenas 45 vagas</span><h2 class="event-heading">Encontro <span>exclusivo</span></h2><img class="event-art" src="imgs/valor.jpeg" alt="Ingresso da Imersão da Base Criminal por R$ 397,00"><a class="event-button" href="<?php echo h($paymentLink); ?>">Quero garantir meu ingresso por R$ 397,00</a></div></section>
-            <section class="event-form" id="captura" aria-labelledby="form-captura"><div class="event-shell event-form-grid"><div class="event-form-intro"><span class="event-kicker">Garanta sua vaga</span><h2 id="form-captura">Inscrições abertas para a Imersão da Base Criminal.</h2><p>Preencha seus dados para garantir o contato sobre o ingresso e receber as informações do encontro.</p><img class="event-art" src="imgs/duvidas frequentes 1.jpeg" alt="Informações sobre a Imersão da Base Criminal"></div><div><div class="messages" aria-live="polite"><?php if ($successMessage !== ""): ?><p class="event-message"><?php echo h($successMessage); ?></p><?php endif; ?><?php if ($noticeMessage !== ""): ?><p class="event-message"><?php echo h($noticeMessage); ?></p><?php endif; ?><?php foreach ($errors as $error): ?><p class="event-message"><?php echo h($error); ?></p><?php endforeach; ?></div><form method="post" action="#captura" novalidate><div class="field"><label for="nome">Nome completo</label><input type="text" id="nome" name="nome" placeholder="Seu nome" required value="<?php echo h($formData["nome"]); ?>"></div><div class="field"><label for="empresa">Instituição / escritório</label><input type="text" id="empresa" name="empresa" placeholder="Nome da instituição" required value="<?php echo h($formData["empresa"]); ?>"></div><div class="field"><label for="whatsapp">WhatsApp</label><input type="tel" id="whatsapp" name="whatsapp" placeholder="(11) 99999-9999" required value="<?php echo h($formData["whatsapp"]); ?>"></div><div class="field"><label for="email">E-mail</label><input type="email" id="email" name="email" placeholder="voce@email.com" required value="<?php echo h($formData["email"]); ?>"></div><p class="integracao-note">Seus dados serão usados para contato sobre a inscrição. O cadastro continua salvo no CSV e no SQLite quando disponível.</p><div class="field full"><button class="event-button" type="submit">Garantir minha vaga</button></div></form></div></div></section>
+            <section class="event-form" id="captura" aria-labelledby="form-captura"><div class="event-shell event-form-grid"><div class="event-form-intro"><span class="event-kicker">Garanta sua vaga</span><h2 id="form-captura">Inscrições abertas para a Imersão da Base Criminal.</h2><p>Preencha seus dados para garantir o contato sobre o ingresso e receber as informações do encontro.</p><img class="event-art" src="imgs/duvidas-frequentes-1.jpeg" alt="Informações sobre a Imersão da Base Criminal"></div><div><div class="messages" aria-live="polite"><?php if ($successMessage !== ""): ?><p class="event-message"><?php echo h($successMessage); ?></p><?php endif; ?><?php if ($noticeMessage !== ""): ?><p class="event-message"><?php echo h($noticeMessage); ?></p><?php endif; ?><?php foreach ($errors as $error): ?><p class="event-message"><?php echo h($error); ?></p><?php endforeach; ?></div><form method="post" action="#captura" novalidate><div class="field"><label for="nome">Nome completo</label><input type="text" id="nome" name="nome" placeholder="Seu nome" required value="<?php echo h($formData["nome"]); ?>"></div><div class="field"><label for="empresa">Instituição / escritório</label><input type="text" id="empresa" name="empresa" placeholder="Nome da instituição" required value="<?php echo h($formData["empresa"]); ?>"></div><div class="field"><label for="whatsapp">WhatsApp</label><input type="tel" id="whatsapp" name="whatsapp" placeholder="(11) 99999-9999" required value="<?php echo h($formData["whatsapp"]); ?>"></div><div class="field"><label for="email">E-mail</label><input type="email" id="email" name="email" placeholder="voce@email.com" required value="<?php echo h($formData["email"]); ?>"></div><p class="integracao-note">Seus dados serão usados para contato sobre a inscrição.</p><div class="field full"><button class="event-button" type="submit">Garantir minha vaga</button></div></form></div></div></section>
             <section class="event-section"><div class="event-shell"><img class="event-art" src="imgs/agradecimentos.jpeg" alt="Obrigado por fazer parte da Imersão da Base Criminal"></div></section>
         </main>
         <footer class="event-footer">Base Criminal | Formação Prática Criminal</footer>
