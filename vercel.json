@@ -2,7 +2,7 @@
   "version": 2,
   "builds": [
     {
-      "src": "index.php",
+      "src": "api/index.php",
       "use": "vercel-php@0.7.0"
     }
   ],
@@ -13,7 +13,7 @@
     },
     {
       "src": "/(.*)",
-      "dest": "/index.php"
+      "dest": "/api/index.php"
     }
   ]
 }
